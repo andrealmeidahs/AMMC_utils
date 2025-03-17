@@ -1,4 +1,5 @@
 import re
+import os
 import sys
 import argparse
 import collections.abc
@@ -21,9 +22,14 @@ def parse_line(s, n_brackets=0, in_quote=False, in_comment=False):
     els = []
     parent_el = els
     cur_el = ""
-    for c in s:
+    ret_str = s 
+    comment = None
+    for chno, c in enumerate(s):
         if c == "#" and not in_quote:
             in_comment = True
+            comment = s[chno+1:]
+            ret_str = s[:chno]
+            break
         if not in_comment:
             if (c == '{') and not in_quote:
                 n_brackets += 1
@@ -47,13 +53,15 @@ def parse_line(s, n_brackets=0, in_quote=False, in_comment=False):
                 if len(cur_el)>0:
                     parent_el.append(cur_el)
                 cur_el = ""
-            elif not in_comment:
+            else:
                 cur_el += c
             
-            
-    return els, n_brackets, in_quote, in_comment
+    return els, ret_str, n_brackets, in_quote, in_comment
 
 def parse_jaamsim(filename, includes=False):
+
+    base_path, root_file = os.path.split(filename)
+    
     buffer = ""
     el_list = []
     el_dict = {}
@@ -63,17 +71,17 @@ def parse_jaamsim(filename, includes=False):
     in_quote = False
     with open(filename, "r") as f:
         for line in f:
-            buffer += line
-            parts = buffer.strip().split()
-            if len(parts)>0 and parts[0] == "include":
-                incfile = parts[1]
+            tmp_buffer = buffer+line
+            parts = tmp_buffer.strip().split()
+            if len(parts)>0 and parts[0].lower() == "include":
+                incfile = os.path.join(base_path, parts[1].strip("'"))
                 el_inc = parse_jaamsim(incfile, includes=True)
                 deep_update(el_dict, el_inc)
                 el_list.extend(el_inc)
                 continue
-            (els, n_brackets,
+            (els, buffer, n_brackets,
              in_quote ,
-             in_comment) = parse_line(buffer,
+             in_comment) = parse_line(tmp_buffer,
                                       n_brackets=0,
                                       in_quote=False,
                                       in_comment=in_comment)
