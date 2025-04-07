@@ -17,18 +17,18 @@ def parse_args():
     parser.add_argument("filename", help="Jaamsim file to parse")
     return parser.parse_args()
 
-def parse_line(s, n_brackets=0, in_quote=False, in_comment=False):
+def parse_line(s, prev_parts=[], n_brackets=0, in_quote=False, in_comment=False):
 
-    els = []
+    els = prev_parts
     parent_el = els
+    for nb in range(n_brackets):
+        parent_el = parent_el[-1]
     cur_el = ""
-    ret_str = s 
     comment = None
     for chno, c in enumerate(s):
         if c == "#" and not in_quote:
             in_comment = True
             comment = s[chno+1:]
-            ret_str = s[:chno]
             break
         if not in_comment:
             if (c == '{') and not in_quote:
@@ -40,7 +40,10 @@ def parse_line(s, n_brackets=0, in_quote=False, in_comment=False):
                 n_brackets -= 1
                 # sys.stderr.write(f"el: {cur_el}\nparent: {parent_el}\ngparent: {grandparent_el}\n")
                 if len(cur_el)>0:
-                    parent_el.append(cur_el)
+                    el_compl = {"contents":cur_el.strip(),
+                                "comment": comment,
+                                "file": "",}
+                    parent_el.append(cur_el.strip())
                 # el = parent_el.copy()
                 parent_el = els
                 for nb in range(n_brackets):
@@ -51,12 +54,12 @@ def parse_line(s, n_brackets=0, in_quote=False, in_comment=False):
                 in_quote = not in_quote
             elif (c == ' ' or c == '\t' or c == '\n') and not in_quote:
                 if len(cur_el)>0:
-                    parent_el.append(cur_el)
+                    parent_el.append(cur_el.strip())
                 cur_el = ""
             else:
                 cur_el += c
             
-    return els, ret_str, n_brackets, in_quote, in_comment
+    return els, n_brackets, in_quote, in_comment
 
 def parse_jaamsim(filename, includes=False):
 
@@ -69,21 +72,23 @@ def parse_jaamsim(filename, includes=False):
     n_brackets = 0
     in_comment = False
     in_quote = False
+    els = []
     with open(filename, "r") as f:
         for line in f:
-            tmp_buffer = buffer+line
-            parts = tmp_buffer.strip().split()
+            sys.stderr.write(line+'\n')
+            parts = line.strip().split()
             if len(parts)>0 and parts[0].lower() == "include":
                 incfile = os.path.join(base_path, parts[1].strip("'"))
                 el_inc = parse_jaamsim(incfile, includes=True)
                 deep_update(el_dict, el_inc)
                 el_list.extend(el_inc)
                 continue
-            (els, buffer, n_brackets,
+            (els, n_brackets,
              in_quote ,
-             in_comment) = parse_line(tmp_buffer,
-                                      n_brackets=0,
-                                      in_quote=False,
+             in_comment) = parse_line(line,
+                                      prev_parts=els,
+                                      n_brackets=n_brackets,
+                                      in_quote=in_quote,
                                       in_comment=in_comment)
             in_comment = False
             if n_brackets < 1:
@@ -97,12 +102,12 @@ def parse_jaamsim(filename, includes=False):
                         el_dict[obj] = {}
                     for ii in range(1,len(els),2):
                         el_dict[obj][els[ii]] = els[ii+1]
-                    sys.stderr.write(f"{el_dict[obj]}\n")
+                    #sys.stderr.write(f"{el_dict[obj]}\n")
                     
-                buffer = ""
                 if n_brackets < 0:
                     sys.stderr.write("Unmatched brackets")
                 n_brackets = 0
+                els = []
             # else:
                 # sys.stderr.write(f"{n_brackets},{in_quote}\n")
             #     sys.stderr.write("Unfinished line")
@@ -115,10 +120,10 @@ if __name__ == "__main__":
     args = parse_args()
     filename = args.filename
     els = parse_jaamsim(filename)
-    for obj, attrs in els.items():
-        print(obj)
-        for attr, val in attrs.items():
-            print("  "+attr+": "+str(val))
+    # for obj, attrs in els.items():
+    #     print(obj)
+    #     for attr, val in attrs.items():
+    #         print("  "+attr+": "+str(val))
             # try:
             # except TypeError:
             #     print("!!"+obj+" -- "+attr)
